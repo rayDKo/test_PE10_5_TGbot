@@ -1,3 +1,4 @@
+import base64
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -6,6 +7,9 @@ import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from telethon import TelegramClient
 from io import BytesIO
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
@@ -16,7 +20,8 @@ stability_api_key = os.getenv("STABILITY_API")  # Новый ключ для Sta
 telegram_api_id = int(os.getenv("TELEGRAM_API_ID", "0"))
 telegram_api_hash = os.getenv("TELEGRAM_API_HASH")
 telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")  # ID чата или канала для публикации
+telegram_chat_id = int(os.getenv("TELEGRAM_CHAT_ID"))  # ID чата или канала для публикации
+telegram_channel_username = '@testPE10_5'  # Имя канала с @
 
 # Проверяем, что все необходимые ключи установлены
 if not all([openai.api_key, currentsapi_key, stability_api_key,
@@ -29,26 +34,26 @@ class Topic(BaseModel):
     topic: str  # Модель для входящей темы
 
 
-def get_recent_news(topic: str) -> str:
-    """
-    Запрос последних новостей с помощью Currents API по заданной теме.
-    Возвращает объединённые заголовки первых 5 новости или сообщение о пустом результате.
-    """
-    url = "https://api.currentsapi.services/v1/latest-news"
-    params = {
-        "language": "en",
-        "keywords": topic,
-        "apiKey": currentsapi_key
-    }
-    response = requests.get(url, params=params)
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"Ошибка при получении данных: {response.text}")
+#def get_recent_news(topic: str) -> str:
+#    """
+#    Запрос последних новостей с помощью Currents API по заданной теме.
+#    Возвращает объединённые заголовки первых 5 новости или сообщение о пустом результате.
+#    """
+#    url = "https://api.currentsapi.services/v1/latest-news"
+#    params = {
+#        "language": "en",
+#        "keywords": topic,
+#        "apiKey": currentsapi_key
+#    }
+#    response = requests.get(url, params=params)
+#    if response.status_code != 200:
+#        raise HTTPException(status_code=500, detail=f"Ошибка при получении данных: {response.text}")
 
-    news_data = response.json().get("news", [])
-    if not news_data:
-        return "Свежих новостей не найдено."
+#    news_data = response.json().get("news", [])
+#    if not news_data:
+#        return "Свежих новостей не найдено."
 
-    return "\n".join([article["title"] for article in news_data[:5]])
+#    return "\n".join([article["title"] for article in news_data[:5]])
 
 
 def generate_content(topic: str) -> dict:
@@ -57,17 +62,17 @@ def generate_content(topic: str) -> dict:
     Использует модель OpenAI GPT-4o-mini.
     Возвращает словарь с title, meta_description и post_content.
     """
-    recent_news = get_recent_news(topic)
+    #recent_news = get_recent_news(topic)
     try:
         title = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[{
                 "role": "user",
                 "content": f"Придумайте привлекательный и точный заголовок для статьи на тему '{topic}', с "
-                           f"учётом актуальных новостей:\n{recent_news}. Заголовок должен быть интересным и ясно "
-                           f"передавать суть темы. Исключить специальные символы типа #, !, _, (, ), -, и подобные"
+                           f"учётом актуальных новостей. Заголовок должен быть интересным и ясно "
+                           f"передавать суть темы. Исключить специальные символы типа #, !, _, (, ), -, и подобные. Ответ на английском языке."
             }],
-            max_tokens=60,
+            max_tokens=20,
             temperature=0.5,
             stop=["\n"]
         ).choices[0].message.content.strip()
@@ -78,9 +83,9 @@ def generate_content(topic: str) -> dict:
                 "role": "user",
                 "content": f"Напишите мета-описание для статьи с заголовком: '{title}'. Оно должно быть полным, "
                            f"информативным и содержать основные ключевые слова. Исключить специальные символы типа "
-                           f"#, !, _, (, ), -, и подобные"
+                           f"#, !, _, (, ), -, и подобные. Ответ на английском языке."
             }],
-            max_tokens=120,
+            max_tokens=40,
             temperature=0.5,
             stop=["."]
         ).choices[0].message.content.strip()
@@ -89,19 +94,19 @@ def generate_content(topic: str) -> dict:
             model="gpt-4o-mini",
             messages=[{
                 "role": "user",
-                "content": f"""Напишите подробную статью на тему '{topic}', используя последние новости:\n{recent_news}. 
+                "content": f"""Напишите подробную статью на тему '{topic}', используя последние новости. 
                 Статья должна быть:
                 1. Информативной и логичной
-                2. Содержать не менее 1500 символов
+                2. Содержать не менее 100 символов
                 3. Иметь четкую структуру с подзаголовками
                 4. Включать анализ текущих трендов
                 5. Иметь вступление, основную часть и заключение
                 6. Включать примеры из актуальных новостей
                 7. Каждый абзац должен быть не менее 3-4 предложений
                 8. Текст должен быть легким для восприятия и содержательным
-                9. Исключить специальные символы типа #, !, _, (, ), -, и подобные"""
+                9. Исключить специальные символы типа #, !, _, (, ), -, и подобные. Ответ на английском языке."""
             }],
-            max_tokens=1000,
+            max_tokens=100,
             temperature=0.5,
             presence_penalty=0.6,
             frequency_penalty=0.6
@@ -115,33 +120,36 @@ def generate_content(topic: str) -> dict:
 
 def generate_image_with_stability(prompt: str, width=512, height=512) -> Image.Image:
     """
-    Генерация квадратного изображения с помощью Stability AI (api.stability.ai).
-    Возвращает PIL Image объект.
+    Генерация квадратного изображения с помощью Stability AI (api.stability.ai),
+    используя multipart/form-data с параметрами запроса,
+    возвращает PIL Image объект.
     """
     url = "https://api.stability.ai/v2beta/stable-image/generate/sd3"
     headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Accept": "image/*",
         "Authorization": f"Bearer {stability_api_key}"
     }
-    json_data = {
-        "width": width,
-        "height": height,
-        "samples": 1,
-        "steps": 25,
-        "cfg_scale": 7,
-        "style_preset": "photographic",
-        "text_prompts": [{"text": prompt, "weight": 1}]
+    # В multipart-запросе тело с параметрами в data, а files содержат пустой файл согласно примеру
+    data = {
+        "prompt": prompt,
+        "output_format": "jpeg",
     }
-    response = requests.post(url, headers=headers, json=json_data)
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"Ошибка при генерации изображения: {response.text}")
-    data = response.json()
-    # Извлекаем base64 изображения из ответа Stability
-    base64_img = data["artifacts"][0]["base64"]
-    image_bytes = BytesIO(base64.b64decode(base64_img))
-    img = Image.open(image_bytes).convert("RGBA")
-    return img
+    files = {"none": ''}  # пустое поле для multipart, чтобы не было ошибки Content-Type
+
+    response = requests.post(url, headers=headers, data=data, files=files)
+
+    if response.status_code == 200:
+        # В ответе напрямую содержится бинарное изображение (jpeg)
+        image_bytes = BytesIO(response.content)
+        img = Image.open(image_bytes).convert("RGBA")
+        return img
+    else:
+        # При ошибке - выбрасываем исключение с деталями
+        try:
+            error_json = response.json()
+        except Exception:
+            error_json = response.text
+        raise HTTPException(status_code=500, detail=f"Ошибка при генерации изображения: {error_json}")
 
 
 def create_image_with_blur_and_text(img: Image.Image, title: str, output_path='story_text.jpg'):
@@ -221,7 +229,7 @@ async def send_post_to_telegram(image_path: str, caption: str):
     """
     Отправляет изображение и подпись в Telegram канал/чат через Telethon.
     """
-    await client.send_file(telegram_chat_id, image_path, caption=caption, parse_mode='html')
+    await client.send_file(telegram_channel_username, image_path, caption=caption, parse_mode='html')
 
 
 @app.post("/generate-post")
@@ -262,5 +270,27 @@ async def heartbeat_api():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("app:app", host="0.0.0.0", port=port)
+    import asyncio
+
+    # Функция для последовательного запуска генерации и отправки по теме из терминала
+    def run_with_input():
+        topic = input("Введите тему для генерации поста: ").strip()
+        print(f"Генерируем пост для темы: {topic}")
+        content = generate_content(topic)
+        img = generate_image_with_stability(content["title"])
+        create_image_with_blur_and_text(img, content["title"])
+        caption = f"<b>{content['title']}</b>\n\n{content['meta_description']}\n\n{content['post_content']}"
+
+        # Асинхронно отправляем в Telegram
+        asyncio.get_event_loop().run_until_complete(send_post_to_telegram("story_text.jpg", caption))
+        print("Пост сгенерирован и отправлен в Telegram.")
+
+    # Запускаем сервер и одновременно спрашиваем тему в терминале
+    # Можно вызвать по желанию run_with_input(), либо запустить сервер
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "interactive":
+        run_with_input()
+    else:
+        port = int(os.getenv("PORT", 8000))
+        uvicorn.run("app:app", host="0.0.0.0", port=port)
+
