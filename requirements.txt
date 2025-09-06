@@ -5,3 +5,6 @@ openai==0.27.0
 requests
 httpx
 tiktoken
+PIL
+telethon
+io
